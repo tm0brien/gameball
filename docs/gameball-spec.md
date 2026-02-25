@@ -680,75 +680,98 @@ The `onFrame` callback is the explicit escape hatch for situations where JSON ca
 
 ## Milestones
 
-### M1 — Core Engine
+### M1 — Core Engine ✅ Complete
 
 The thing that runs. Goal: an orbiting planet demo driven entirely by formulas.
 
-- Scene config parser and validator (JSON Schema)
-- Object types: `ellipse`, `rect`, `line`, `text`
-- Formula evaluation via mathjs
-- Frame loop
-- Canvas 2D renderer (draw command abstraction — core emits commands, renderer executes them)
-- Basic web app shell: paste JSON → see simulation
+- ✅ Scene config parser — `SceneConfig`, `SceneObject` TypeScript types
+- ✅ Object types: `ellipse`, `rect`, `line`, `text` (rendered); `arc`, `group` stubbed
+- ✅ Formula evaluation via mathjs — sandboxed, scoped to `frame`, `t`, `width`, `height`, `objects.<id>.*`
+- ✅ Frame loop — `FrameLoop` class with `requestAnimationFrame` and fps throttling
+- ✅ Canvas 2D renderer — draw command abstraction; core emits commands, renderer executes them
+- ✅ Basic web app shell — split-pane JSON editor with debounced live preview, ⌘↵ to run, error banner
+- ✅ Three built-in demos: Solar System, Lissajous, Ripples
 
-### M2 — Scene Graph + Agents
+**Implementation notes:**
+- Engine lives in `src/engine/` (pure TS, zero DOM). Renderer in `src/renderer/`. React components in `src/components/`.
+- Trail rendering was also completed here (ahead of M5 schedule) — trail history managed in `Gameball.tsx`, rendered as fading `TrailCommand` draw commands.
+- All objects use center-point coordinates (x, y = center) for consistency across types.
+- `random` in formulas is available but unseeded — avoid in configs where reproducibility matters.
+
+---
+
+### M2 — Scene Graph + Agents 🔲 Not started
 
 Goal: a flock of agents steering around each other.
 
-- Parent references; `parent.x` / `parent.y` in formula scope
-- `agent` type with mass, maxSpeed, maxForce
-- Steering behavior primitives: `seek`, `flee`, `arrive`, `wander`, `separate`
-- `pursue`, `evade`, `cohere`, `align`, `follow_path`, `maintain_zone`
-- Basic demo: boids / flocking simulation
+- ✅ Parent references; `parent.x` / `parent.y` in formula scope *(completed in M1)*
+- 🔲 `agent` type with `mass`, `maxSpeed`, `maxForce`
+- 🔲 Physics integration — velocity + steering force accumulation per frame
+- 🔲 Steering behavior primitives: `seek`, `flee`, `arrive`, `wander`, `separate`
+- 🔲 Remaining behaviors: `pursue`, `evade`, `cohere`, `align`, `follow_path`, `maintain_zone`
+- 🔲 Basic demo: boids / flocking simulation
 
-### M3 — Sports Plugin (Basketball)
+---
+
+### M3 — Sports Plugin (Basketball) 🔲 Not started
 
 Goal: a recognizable basketball half-court simulation.
 
-- Basketball court renderer (full + half variants)
-- Team / player / ball compilation from plugin config → core scene
-- Sports behavior primitives: `guard`, `defend_zone`, `fast_break`, `set_screen`
-- Real-world coordinate transform (feet → canvas pixels)
-- Basic demo: 5v5 half-court with a simple play
+- 🔲 Basketball court renderer (full + half variants)
+- 🔲 Team / player / ball compilation from plugin config → core scene
+- 🔲 Sports behavior primitives: `guard`, `defend_zone`, `fast_break`, `set_screen`
+- 🔲 Real-world coordinate transform (feet → canvas pixels)
+- 🔲 Basic demo: 5v5 half-court with a simple play
 
-### M3.5 — Data-Driven Playback
+---
+
+### M3.5 — Data-Driven Playback 🔲 Not started
 
 Goal: feed a shot chart or play-by-play and watch it play out.
 
-- `events` array support — behavior switching triggered at specific frames
-- `keyframes` array support — exact positional replay from tracking data
-- Fidelity model: keyframes override behaviors; behaviors fill gaps
-- Shot chart visualization (static + animated)
-- Basketball play-by-play demo
+- 🔲 `events` array support — behavior switching triggered at specific frames
+- 🔲 `keyframes` array support — exact positional replay from tracking data
+- 🔲 Fidelity model: keyframes override behaviors; behaviors fill gaps
+- 🔲 Shot chart visualization (static + animated)
+- 🔲 Basketball play-by-play demo
+- 🔲 NBA Stats API coordinate transform (`LOC_X`/`LOC_Y` → Gameball feet)
 
-### M4 — Baseball + Football
+---
+
+### M4 — Baseball + Football 🔲 Not started
 
 Goal: all three flagship sports are playable.
 
-- Baseball field renderer
-- Baseball event vocabulary + spray chart schema
-- Football field renderer (yard lines, hash marks, endzones)
-- Football event vocabulary + formation schema
-- Demos for each sport
+- 🔲 Baseball field renderer
+- 🔲 Baseball event vocabulary + spray chart schema
+- 🔲 Football field renderer (yard lines, hash marks, endzones)
+- 🔲 Football event vocabulary + formation schema
+- 🔲 Demos for each sport
 
-### M5 — Trails, Polish, Remaining Primitives
+---
 
-- Trail rendering
-- `arc` and `group` object types
-- `onFrame` escape hatch
-- Soccer, hockey, tennis court variants
-- Performance profiling (target: 22 agents at 60fps without frame drops)
+### M5 — Polish + Remaining Primitives 🔲 Not started
 
-### M6 — DX + AI Authoring
+- ✅ Trail rendering *(completed in M1)*
+- 🔲 `arc` and `group` object types (rendering implementation)
+- 🔲 `onFrame` escape hatch
+- 🔲 Soccer, hockey, tennis court variants
+- 🔲 Performance profiling (target: 22 agents at 60fps without frame drops)
 
-- JSON Schema file published for LLM context
-- Schema docs site
-- Validated example configs for each sport (usable as LLM few-shot examples)
-- Engine internals doc (for Swift port reference)
+---
 
-### M7 — iOS (Swift)
+### M6 — DX + AI Authoring 🔲 Not started
 
-- Native Swift engine rewrite (frame loop, formula eval, steering behaviors)
-- SpriteKit renderer
-- Sports plugin compiler running server-side; iOS app consumes compiled scene configs
-- Feature parity with web on basketball, baseball, football
+- 🔲 JSON Schema file published for LLM context
+- 🔲 Schema docs site
+- 🔲 Validated example configs for each sport (usable as LLM few-shot examples)
+- 🔲 Engine internals doc (for Swift port reference)
+
+---
+
+### M7 — iOS (Swift) 🔲 Not started
+
+- 🔲 Native Swift engine rewrite (frame loop, formula eval, steering behaviors)
+- 🔲 SpriteKit renderer
+- 🔲 Sports plugin compiler running server-side; iOS app consumes compiled scene configs
+- 🔲 Feature parity with web on basketball, baseball, football

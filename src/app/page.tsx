@@ -3,8 +3,8 @@ import type { Viewport } from 'next'
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
-    title: 'Next.js template',
-    description: 'A templated repo for rapid development of Next.js apps.'
+    title: 'Gameball',
+    description: 'A declarative, JSON-first framework for 2D simulations and sports visualizations.'
 }
 
 export const viewport: Viewport = {

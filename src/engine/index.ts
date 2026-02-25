@@ -1,0 +1,5 @@
+export type { SceneConfig, SceneObject, EllipseObject, RectObject, LineObject, TextObject, ResolvedObject, TrailConfig, FormulaValue, AnimatableNumber, AnimatableBoolean, AnimatableColor, AnimatableString } from './types'
+export { resolveScene } from './scene'
+export type { ResolveResult } from './scene'
+export { FrameLoop } from './loop'
+export type { FrameCallback } from './loop'
