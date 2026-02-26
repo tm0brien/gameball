@@ -8,33 +8,38 @@
 
 Gameball is a layered simulation framework built on a simple premise: **describe what you want, not how to draw it.** A JSON config should be enough to produce a running simulation — an orbiting planet, a basketball fast break, a crowd evacuating a stadium.
 
-The framework is designed with two authors in mind: humans who want to build simulations expressively, and LLMs that need a structured, unambiguous vocabulary to generate valid scenes without writing imperative code.
+The primary authoring model is a **conversational agentic loop**: a user describes what they want in natural language, an AI agent interacts with a live running simulation through a structured tool API, and the result streams to a renderer in real time. The AI doesn't write documents and hand them off — it observes the simulation, declares desired state, runs frames, and iterates. The JSON scene config is the shared representation that flows through this loop, not the interface itself.
 
 ---
 
 ## Design Principles
 
-**Declarative first.** State is data, not code. Simulations are defined as JSON configs, not draw loops.
+**Declarative first.** State is data, not code. Simulations are defined as JSON configs, not draw loops. The AI declares desired state — what an object should be — and the engine reconciles it. This is analogous to React's model: describe the result you want, not the mutations to get there.
 
-**Layered abstractions.** The core handles geometry and rendering. Plugins provide domain vocabularies (sports, traffic, biology, etc.) that compile down to core primitives. Layers don't bleed into each other.
+**Conversational and agentic.** The primary interaction model is a running loop where an AI agent observes the simulation, reasons about a change, declares new desired state via tools, and observes the effect. This loop runs server-side against a headless engine instance, and results stream to the client renderer.
 
-**LLM-legible.** The schema should be simple enough that a language model can generate valid configs from a natural language description. Ambiguity in the schema is a bug.
+**Layered abstractions.** The core handles geometry and rendering. Plugins provide domain vocabularies (sports, traffic, biology, etc.) that compile down to core primitives. Layers don't bleed into each other. Plugin-level tools let the AI express high-level intent (`setPlay`, `setFormation`) without touching raw primitives.
+
+**LLM-legible.** The schema should be simple enough that a language model can reason about any part of the scene without needing the whole document. Ambiguity in the schema is a bug. The tool surface should match the schema's grain — one tool per distinct concern.
 
 **Escape hatches, not workarounds.** Where declarative falls short (complex conditional logic, custom behaviors), the framework provides explicit, clean extension points rather than forcing users to abuse the declarative layer.
 
 **Composable behaviors.** Agent behaviors are named, reusable primitives that can be composed — not monolithic scripts.
 
-**Renderer-agnostic core.** The engine produces draw commands each frame; the renderer executes them. The core has no knowledge of Canvas, Skia, or any rendering API.
+**Renderer-agnostic core.** The engine produces draw commands each frame; the renderer executes them. The core has no knowledge of Canvas, Skia, or any rendering API. This is what makes server-side headless execution and the iOS native rewrite both viable.
 
 ---
 
 ## Architecture
+
+### Layers
 
 ```
 ┌─────────────────────────────────────────┐
 │           Plugin Layer                  │
 │  (sports, traffic, biology, etc.)       │
 │  Domain vocab → core primitives         │
+│  High-level AI tools (setPlay, etc.)    │
 ├─────────────────────────────────────────┤
 │           Core Layer                    │
 │  Scene graph, formula evaluation,       │
@@ -50,15 +55,48 @@ The framework is designed with two authors in mind: humans who want to build sim
 
 An AI or human author works at the **plugin layer** or directly at the **core layer** depending on what they're building.
 
----
+### Server / Client Split
 
-## Platform Strategy
+The engine is pure TypeScript with no DOM dependency. This enables it to run both server-side (headless, for the AI agent loop) and client-side (for rendering). The JSON scene config is the synchronization primitive between the two.
+
+```
+┌──────────────────────────────────────────────┐
+│  Server                                      │
+│                                              │
+│  AI Agent Loop                               │
+│    ↓ tool calls                              │
+│  Tool Layer                                  │
+│    getScene / getObject                      │
+│    setObject / addObject / deleteObject      │
+│    runFrames / getSimulationState            │
+│    plugin tools: setPlay, setFormation, …    │
+│    ↓                                         │
+│  Headless Engine Instance                    │
+│    ↓ produces                                │
+│  Scene Config (source of truth)              │
+│    ↓ streamed via SSE / polling              │
+└────────────────────────┬─────────────────────┘
+                         │
+┌────────────────────────▼─────────────────────┐
+│  Client                                      │
+│                                              │
+│  React Web App                               │
+│    Chat UI → POST /api/chat                  │
+│    Scene config subscriber                   │
+│    Engine instance (render only)             │
+│    Canvas 2D Renderer                        │
+└──────────────────────────────────────────────┘
+```
+
+The client runs the engine locally for rendering, but the engine instance on the server is the authoritative one. The AI only ever interacts with the server instance. Scene config diffs flow to the client; the client re-renders.
+
+### Platform Strategy
 
 Gameball targets two platforms with different renderer implementations but a shared schema and engine design.
 
-**Web (v1):** TypeScript engine + Canvas 2D renderer. This is the reference implementation. The JSON schema, formula evaluator, physics system, and plugin compilers are all built and validated here first.
+**Web (v1):** TypeScript engine + Canvas 2D renderer. This is the reference implementation. The JSON schema, formula evaluator, physics system, plugin compilers, and agent tool API are all built and validated here first. React is used for the web UI shell (chat, editor, controls) only — not for simulation state management.
 
-**iOS (long-term):** Native Swift engine + SpriteKit renderer. The engine is a deliberate rewrite of the TypeScript reference implementation in Swift — not a port of the web app. The JSON schema is identical across platforms. Plugin compilation can run server-side to avoid reimplementing it natively.
+**iOS (long-term):** Native Swift engine + SpriteKit renderer. The engine is a deliberate rewrite of the TypeScript reference implementation in Swift — not a port of the web app. The JSON schema is identical across platforms. Plugin compilation runs server-side; the iOS app consumes compiled scene configs. The agent loop and tool API remain server-side and are platform-agnostic.
 
 Because the iOS engine is a planned rewrite, the TypeScript implementation must be **precisely documented**. Steering force calculations, formula evaluation order, frame timing, and coordinate transforms should be unambiguous in the reference implementation so the Swift version can produce matching output.
 
@@ -69,7 +107,9 @@ packages/
   core/              # Engine, formula eval, physics — pure TS, no DOM
   renderer-canvas/   # Canvas 2D renderer for web
   sports-plugin/     # Compiles sport configs → core scene configs
+  agent-tools/       # Tool layer for server-side AI agent loop
   app-web/           # Web app (React + Canvas renderer)
+  app-server/        # Next.js API: chat endpoint, SSE, session state
 ```
 
 ---
@@ -638,28 +678,103 @@ Pre-snap positioning can be declared as a named formation string or as explicit 
 
 ## AI Authoring
 
-Gameball is designed so that LLMs can generate valid scene configs from natural language. The recommended prompting pattern:
+### Interaction Model
 
-1. Provide the Gameball spec (this document) as context
-2. Describe the desired simulation in natural language
-3. Request output as a valid Gameball JSON config
-4. Optionally specify the target layer: core, plugin, or a specific plugin schema
+Gameball's primary authoring model is a **conversational agentic loop**, not one-shot document generation. The AI agent runs server-side, maintains a live engine instance, and interacts with it through a structured tool API. The user's natural language, the AI's tool calls, and the resulting scene mutations form a persistent conversation.
 
-### Example Prompt
+The loop each turn:
 
-> "Using the Gameball sports plugin, create a basketball half-court scenario showing a pick and roll play with 3 offensive players and 2 defenders. The ball carrier should drive toward the basket after the screen."
+1. **Observe** — read current scene state via `getScene()` or `getObject(id)`
+2. **Reason** — decide what change moves toward the user's goal
+3. **Declare** — call `setObject` or a plugin tool to express desired state
+4. **Simulate** — call `runFrames(n)` to tick the engine and observe behavior
+5. **Iterate** — if the result doesn't match the goal, adjust and repeat
 
-### LLM Output Contract
+The AI does not write raw JSON and hand it off. It interacts with a live system and can observe the effects of changes over time before deciding whether to continue.
 
-A model generating Gameball configs should:
+### Declarative Tool Calls
 
-- Always include `plugin` and `config` keys when using a plugin
+The tool surface is **declarative**: each tool call describes desired state, not a mutation to perform. `setObject(id, spec)` says "this object should look like this" — not "add a behavior" or "change a property." The engine reconciles the diff internally.
+
+This mirrors React's model: describe the result you want, let the system figure out how to get there. It keeps the AI's intent legible (each call is a full statement of what an object should be), and makes errors easier to catch (the schema validates the full spec, not individual mutations).
+
+The one exception is `deleteObject(id)`, which has no declarative equivalent.
+
+### Plugin-Level Intent
+
+When using the sports plugin, the AI should prefer high-level plugin tools over raw `setObject` calls. `setPlay("pick_and_roll", { ballHandler: "home.player1", screener: "home.player2" })` is more reliable than constructing the equivalent behaviors array manually — and more legible to the user watching the conversation.
+
+Raw `setObject` calls are appropriate for non-domain-specific adjustments: repositioning a player, changing a color, tuning a max speed.
+
+### Agent Tool Contract
+
+A model using the Gameball agent tools should:
+
+- Always call `getScene()` or `getObject(id)` before modifying something it didn't just create
+- Use `setObject(id, fullSpec)` with a complete object spec, not partial patches
+- Prefer plugin tools (`setPlay`, `setFormation`) over assembling raw behaviors arrays when a plugin is active
+- Use `runFrames(n)` after changes that affect agent movement — check that behavior produces the intended result before responding to the user
 - Always include `id` on any object referenced by another object or behavior
-- Use formula strings only for continuously animated values; use static values for initial state
-- Prefer named behavior primitives over raw formulas for agent movement
+- Use real-world coordinates when working with sports plugin configs (`coordinateSystem: "real-world"` is the default)
 - Not invent behavior types not listed in the spec
-- Use real-world coordinates when authoring sports plugin configs (`coordinateSystem: "real-world"` is the default)
-- Not use the `scenario` free-text field — describe plays via explicit `formation`, `behaviors`, and `events` instead
+
+---
+
+## Agent Tool API
+
+The tool layer is the interface between the AI agent and the running simulation. Tools are defined as typed functions available to the LLM via function/tool calling. The server executes each tool call against the headless engine instance and returns the result.
+
+### Observation Tools
+
+| Tool | Signature | Returns |
+|---|---|---|
+| `getScene` | `()` | Full current scene config |
+| `getObject` | `(id: string)` | Single object's full current spec |
+| `getSimulationState` | `()` | Live runtime state of all objects (positions, velocities) at current frame |
+
+### Scene Mutation Tools
+
+| Tool | Signature | Description |
+|---|---|---|
+| `addObject` | `(spec: SceneObject)` | Adds a new object; `id` must be unique |
+| `setObject` | `(id: string, spec: SceneObject)` | Declares desired state for an object; replaces the full spec |
+| `deleteObject` | `(id: string)` | Removes an object and any references to it |
+
+`setObject` is the primary mutation tool. It takes a **complete object spec**, not a partial patch. The AI should call `getObject(id)` first, then construct the full desired spec, then call `setObject`. This keeps intent legible and validation clean.
+
+### Simulation Tools
+
+| Tool | Signature | Returns |
+|---|---|---|
+| `runFrames` | `(n: number)` | Ticks the engine `n` frames; returns runtime state snapshot after the last frame |
+| `resetSimulation` | `()` | Resets the engine to frame 0 |
+
+`runFrames` closes the observe/act loop. After declaring a change with `setObject`, the AI should call `runFrames` to confirm the behavior plays out as intended before responding to the user.
+
+### Plugin Tools (Sports)
+
+Plugin tools express **high-level intent** at the domain level. They are preferred over assembling raw behaviors arrays manually.
+
+| Tool | Signature | Description |
+|---|---|---|
+| `setPlay` | `(type: string, config: object)` | Declares a named play (e.g. `pick_and_roll`, `fast_break`) with agent assignments |
+| `setFormation` | `(side: "offense" \| "defense", formation: string \| object)` | Sets a pre-snap or pre-possession formation |
+| `setPossession` | `(agentId: string)` | Transfers ball possession to an agent |
+
+Plugin tools compile to `setObject` calls internally. They are not bypassing the declarative model — they are a higher-level vocabulary on top of it.
+
+### Error Semantics
+
+All tools return either a success result or a structured error. Common errors:
+
+| Error | Cause |
+|---|---|
+| `OBJECT_NOT_FOUND` | `id` doesn't exist in the current scene |
+| `INVALID_SPEC` | Object spec fails schema validation; details include which fields |
+| `BEHAVIOR_NOT_FOUND` | Referenced behavior type doesn't exist on the object |
+| `DUPLICATE_ID` | `addObject` called with an id that already exists |
+
+Errors are returned as tool results, not thrown. The AI is expected to read the error and correct its call rather than retry blindly.
 
 ---
 
@@ -700,7 +815,29 @@ The thing that runs. Goal: an orbiting planet demo driven entirely by formulas.
 
 ---
 
-### M2 — Scene Graph + Agents 🔲 Not started
+### M2 — Agentic Loop 🔲 Not started
+
+Goal: a working end-to-end proof of concept — user sends a message, AI agent manipulates a live scene via tool calls, client renders the result.
+
+- 🔲 Headless engine instance running server-side (Next.js API route)
+- 🔲 In-memory session state: `Map<sessionId, SceneConfig>`
+- 🔲 Core tool implementations: `getScene`, `getObject`, `addObject`, `setObject`, `deleteObject`, `runFrames`, `getSimulationState`
+- 🔲 LLM integration with tool calling (Anthropic or OpenAI SDK)
+- 🔲 `POST /api/chat` endpoint — receives user message, runs agent loop, streams text response
+- 🔲 `GET /api/scene` endpoint — returns current scene config for a session
+- 🔲 Client polling: fetches scene after each AI turn and re-renders
+- 🔲 Chat UI connected to `/api/chat`
+- 🔲 POC demo: conversational creation of a simple orbiting scene from scratch
+
+**Implementation notes:**
+- Use SSE or polling for the POC; WebSocket optimization deferred to M6
+- The agent loop may call multiple tools in a single user turn before returning a response
+- Session state is ephemeral (in-memory); persistence deferred to M6
+- The client runs the engine locally for rendering only; all authoritative state lives on the server
+
+---
+
+### M3 — Scene Graph + Agent Physics 🔲 Not started
 
 Goal: a flock of agents steering around each other.
 
@@ -713,19 +850,20 @@ Goal: a flock of agents steering around each other.
 
 ---
 
-### M3 — Sports Plugin (Basketball) 🔲 Not started
+### M4 — Sports Plugin (Basketball) 🔲 Not started
 
-Goal: a recognizable basketball half-court simulation.
+Goal: a recognizable basketball half-court simulation, authored conversationally.
 
 - 🔲 Basketball court renderer (full + half variants)
 - 🔲 Team / player / ball compilation from plugin config → core scene
 - 🔲 Sports behavior primitives: `guard`, `defend_zone`, `fast_break`, `set_screen`
 - 🔲 Real-world coordinate transform (feet → canvas pixels)
-- 🔲 Basic demo: 5v5 half-court with a simple play
+- 🔲 Plugin tools: `setPlay`, `setFormation`, `setPossession`
+- 🔲 Basic demo: conversational 5v5 half-court play creation
 
 ---
 
-### M3.5 — Data-Driven Playback 🔲 Not started
+### M4.5 — Data-Driven Playback 🔲 Not started
 
 Goal: feed a shot chart or play-by-play and watch it play out.
 
@@ -738,7 +876,7 @@ Goal: feed a shot chart or play-by-play and watch it play out.
 
 ---
 
-### M4 — Baseball + Football 🔲 Not started
+### M5 — Baseball + Football 🔲 Not started
 
 Goal: all three flagship sports are playable.
 
@@ -750,28 +888,33 @@ Goal: all three flagship sports are playable.
 
 ---
 
-### M5 — Polish + Remaining Primitives 🔲 Not started
+### M6 — Polish + Infrastructure 🔲 Not started
 
 - ✅ Trail rendering *(completed in M1)*
 - 🔲 `arc` and `group` object types (rendering implementation)
 - 🔲 `onFrame` escape hatch
 - 🔲 Soccer, hockey, tennis court variants
 - 🔲 Performance profiling (target: 22 agents at 60fps without frame drops)
+- 🔲 Session persistence (replace in-memory state with durable store)
+- 🔲 WebSocket upgrade for real-time scene streaming (replace polling)
+- 🔲 Conversation history persistence
 
 ---
 
-### M6 — DX + AI Authoring 🔲 Not started
+### M7 — DX + Documentation 🔲 Not started
 
 - 🔲 JSON Schema file published for LLM context
 - 🔲 Schema docs site
 - 🔲 Validated example configs for each sport (usable as LLM few-shot examples)
 - 🔲 Engine internals doc (for Swift port reference)
+- 🔲 Agent tool API reference doc
 
 ---
 
-### M7 — iOS (Swift) 🔲 Not started
+### M8 — iOS (Swift) 🔲 Not started
 
 - 🔲 Native Swift engine rewrite (frame loop, formula eval, steering behaviors)
 - 🔲 SpriteKit renderer
 - 🔲 Sports plugin compiler running server-side; iOS app consumes compiled scene configs
+- 🔲 Agent loop and tool API remain server-side; iOS app is renderer + chat UI only
 - 🔲 Feature parity with web on basketball, baseball, football
