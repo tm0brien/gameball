@@ -1,8 +1,8 @@
-import SimulatorUI from 'components/SimulatorUI'
+import AgentUI from 'components/AgentUI'
 import React from 'react'
 
 const Root = () => {
-    return <SimulatorUI />
+    return <AgentUI />
 }
 
 export default Root

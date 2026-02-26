@@ -9,6 +9,7 @@
         "lint": "eslint ."
     },
     "dependencies": {
+        "@anthropic-ai/sdk": "^0.78.0",
         "eslint-config-nxt": "^0.1.2",
         "framer-motion": "^12.9.2",
         "material-symbols": "^0.39.1",
