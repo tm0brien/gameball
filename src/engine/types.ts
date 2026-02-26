@@ -72,6 +72,55 @@ export interface GroupObject extends BaseObject {
     type: 'group'
 }
 
+// ─── Agent / Physics types ────────────────────────────────────────────────────
+
+export type BehaviorTarget = string | { x: number; y: number }
+
+export type ZoneConfig =
+    | { shape: 'rect'; x: number; y: number; width: number; height: number }
+    | { shape: 'circle'; x: number; y: number; radius: number }
+
+export type BehaviorConfig =
+    | { type: 'seek'; target: BehaviorTarget; weight?: number }
+    | { type: 'flee'; target: BehaviorTarget; radius?: number; weight?: number }
+    | { type: 'arrive'; target: BehaviorTarget; slowRadius?: number; weight?: number }
+    | { type: 'pursue'; target: string; weight?: number }
+    | { type: 'evade'; target: string; radius?: number; weight?: number }
+    | { type: 'wander'; strength?: number; speed?: number; weight?: number }
+    | { type: 'separate'; radius?: number; weight?: number }
+    | { type: 'align'; radius?: number; weight?: number }
+    | { type: 'cohere'; radius?: number; weight?: number }
+    | { type: 'follow_path'; path: Array<{ x: number; y: number }>; loop?: boolean; weight?: number }
+    | { type: 'maintain_zone'; zone: ZoneConfig; weight?: number }
+
+export interface AgentObject extends BaseObject {
+    type: 'agent'
+    width?: number
+    height?: number
+    fill?: AnimatableColor
+    stroke?: AnimatableColor
+    strokeWidth?: number
+    mass?: number
+    maxSpeed?: number
+    maxForce?: number
+    behaviors?: BehaviorConfig[]
+    // Initial velocity (applied at frame 0 if no existing state)
+    vx?: number
+    vy?: number
+    // Edge handling: 'wrap' teleports agents across edges, 'none' lets them drift
+    edges?: 'wrap' | 'none'
+}
+
+// Runtime state for physics agents — persists between frames
+export interface AgentState {
+    x: number
+    y: number
+    vx: number
+    vy: number
+    wanderAngle: number
+    pathIndex: number
+}
+
 export type SceneObject =
     | EllipseObject
     | RectObject
@@ -79,6 +128,7 @@ export type SceneObject =
     | TextObject
     | ArcObject
     | GroupObject
+    | AgentObject
 
 export interface SceneConfig {
     background?: string

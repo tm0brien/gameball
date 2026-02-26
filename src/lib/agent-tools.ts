@@ -26,7 +26,7 @@ export const TOOLS: Anthropic.Tool[] = [
     {
         name: 'addObject',
         description:
-            'Adds a new object to the scene. The spec must include a unique id and type. Types: ellipse, rect, line, text, group. Any numeric property can be animated with { "formula": "expression" }.',
+            'Adds a new object to the scene. The spec must include a unique id and type. Types: ellipse, rect, line, text, group, agent. Agents are physics-enabled and accept mass, maxSpeed, maxForce, and a behaviors array. Any numeric property can be animated with { "formula": "expression" }.',
         input_schema: {
             type: 'object',
             properties: {
@@ -172,7 +172,8 @@ export function executeTool(
             for (let i = 0; i < n; i++) {
                 const frame = startFrame + i
                 const t = frame / fps
-                const result = resolveScene(session.scene, frame, t, width, height)
+                const result = resolveScene(session.scene, frame, t, width, height, session.agentStates)
+                session.agentStates = result.agentStates
                 if (i === n - 1) {
                     lastObjects = result.objects as Record<string, unknown>
                 }
@@ -190,12 +191,13 @@ export function executeTool(
             const height = session.scene.height || 600
             const fps = session.scene.fps || 60
             const t = session.frame / fps
-            const result = resolveScene(session.scene, session.frame, t, width, height)
+            const result = resolveScene(session.scene, session.frame, t, width, height, session.agentStates)
             return { success: true, data: { frame: session.frame, objects: result.objects } }
         }
 
         case 'resetSimulation': {
             session.frame = 0
+            session.agentStates = new Map()
             return { success: true, data: { frame: 0 } }
         }
 

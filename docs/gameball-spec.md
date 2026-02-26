@@ -815,38 +815,48 @@ The thing that runs. Goal: an orbiting planet demo driven entirely by formulas.
 
 ---
 
-### M2 — Agentic Loop 🔲 Not started
+### M2 — Agentic Loop ✅ Complete
 
 Goal: a working end-to-end proof of concept — user sends a message, AI agent manipulates a live scene via tool calls, client renders the result.
 
-- 🔲 Headless engine instance running server-side (Next.js API route)
-- 🔲 In-memory session state: `Map<sessionId, SceneConfig>`
-- 🔲 Core tool implementations: `getScene`, `getObject`, `addObject`, `setObject`, `deleteObject`, `runFrames`, `getSimulationState`
-- 🔲 LLM integration with tool calling (Anthropic or OpenAI SDK)
-- 🔲 `POST /api/chat` endpoint — receives user message, runs agent loop, streams text response
-- 🔲 `GET /api/scene` endpoint — returns current scene config for a session
-- 🔲 Client polling: fetches scene after each AI turn and re-renders
-- 🔲 Chat UI connected to `/api/chat`
-- 🔲 POC demo: conversational creation of a simple orbiting scene from scratch
+- ✅ Headless engine instance running server-side (Next.js API route)
+- ✅ In-memory session state: `Map<sessionId, SceneConfig>` with conversation history
+- ✅ Core tool implementations: `getScene`, `getObject`, `addObject`, `setObject`, `deleteObject`, `runFrames`, `getSimulationState`, `resetSimulation`
+- ✅ LLM integration with tool calling (Anthropic SDK)
+- ✅ `POST /api/chat` endpoint — receives user message, runs agent loop, streams text response
+- ✅ `GET /api/scene` endpoint — returns current scene config for a session
+- ✅ Client polling: fetches scene after each AI turn and re-renders
+- ✅ Chat UI (`AgentUI.tsx`) connected to `/api/chat`
+- ✅ POC demo: conversational creation of a simple orbiting scene from scratch
 
 **Implementation notes:**
-- Use SSE or polling for the POC; WebSocket optimization deferred to M6
-- The agent loop may call multiple tools in a single user turn before returning a response
+- Polling used for POC; WebSocket upgrade deferred to M6
+- The agent loop runs multiple tool call rounds in a single user turn before returning a response
 - Session state is ephemeral (in-memory); persistence deferred to M6
-- The client runs the engine locally for rendering only; all authoritative state lives on the server
+- Single `default` session in v1; multi-session support deferred
+- Tool layer in `src/lib/agent-tools.ts`; session store in `src/lib/session-store.ts`; system prompt in `src/lib/system-prompt.ts`
+- `resetSimulation` tool added (resets engine to frame 0) beyond original spec
 
 ---
 
-### M3 — Scene Graph + Agent Physics 🔲 Not started
+### M3 — Scene Graph + Agent Physics ✅ Complete
 
 Goal: a flock of agents steering around each other.
 
 - ✅ Parent references; `parent.x` / `parent.y` in formula scope *(completed in M1)*
-- 🔲 `agent` type with `mass`, `maxSpeed`, `maxForce`
-- 🔲 Physics integration — velocity + steering force accumulation per frame
-- 🔲 Steering behavior primitives: `seek`, `flee`, `arrive`, `wander`, `separate`
-- 🔲 Remaining behaviors: `pursue`, `evade`, `cohere`, `align`, `follow_path`, `maintain_zone`
-- 🔲 Basic demo: boids / flocking simulation
+- ✅ `agent` type with `mass`, `maxSpeed`, `maxForce`, `vx`, `vy`, `edges`
+- ✅ Physics integration — velocity + steering force accumulation per frame
+- ✅ Steering behavior primitives: `seek`, `flee`, `arrive`, `wander`, `separate`
+- ✅ Remaining behaviors: `pursue`, `evade`, `cohere`, `align`, `follow_path`, `maintain_zone`
+- ✅ Basic demo: boids / flocking simulation (40 agents, wrap edges)
+
+**Implementation notes:**
+- `AgentState` (`x`, `y`, `vx`, `vy`, `wanderAngle`, `pathIndex`) persists between frames; stored in `agentStatesRef` client-side and `session.agentStates` server-side
+- Two-pass approach: start-of-frame snapshot used for all neighbor queries (separate, align, cohere, pursue, evade) so agents see consistent positions
+- `edges: 'wrap'` teleports agents across canvas edges; default `'none'` lets them drift
+- Agents render as ellipses using their `fill`, `stroke`, `width`, `height` properties
+- `src/engine/behaviors.ts` contains all steering force implementations
+- `resolveScene` signature extended: accepts optional `prevAgentStates` and returns updated `agentStates`
 
 ---
 

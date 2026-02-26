@@ -1,6 +1,6 @@
 'use client'
 
-import type { SceneConfig } from 'engine/types'
+import type { AgentState, SceneConfig } from 'engine/types'
 import { FrameLoop } from 'engine/loop'
 import { resolveScene } from 'engine/scene'
 import type { TrailCommand } from 'renderer/commands'
@@ -26,6 +26,9 @@ export default function Gameball({ scene, width, height, style, className }: Pro
     // Trail history: objectId → rolling array of {x, y} positions
     const trailsRef = useRef<Map<string, Array<{ x: number; y: number }>>>(new Map())
 
+    // Agent physics state — persists between frames
+    const agentStatesRef = useRef<Map<string, AgentState>>(new Map())
+
     useEffect(() => {
         const canvas = canvasRef.current
         const container = containerRef.current
@@ -48,8 +51,9 @@ export default function Gameball({ scene, width, height, style, className }: Pro
         const ro = new ResizeObserver(resize)
         ro.observe(container)
 
-        // Reset trails when scene changes
+        // Reset trails and agent states when scene changes
         trailsRef.current.clear()
+        agentStatesRef.current.clear()
 
         const loop = new FrameLoop(sceneRef.current.fps ?? 60, (frame, t) => {
             const s = sceneRef.current
@@ -57,7 +61,8 @@ export default function Gameball({ scene, width, height, style, className }: Pro
             const h = canvas.height
             if (w === 0 || h === 0) return
 
-            const { commands, objects } = resolveScene(s, frame, t, w, h)
+            const { commands, objects, agentStates } = resolveScene(s, frame, t, w, h, agentStatesRef.current)
+            agentStatesRef.current = agentStates
 
             // Update trail history for any object that has a trail config
             const trailCommands: TrailCommand[] = []

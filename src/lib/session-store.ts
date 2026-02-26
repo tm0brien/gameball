@@ -1,8 +1,9 @@
-import type { SceneConfig } from 'engine/types'
+import type { AgentState, SceneConfig } from 'engine/types'
 
 export interface Session {
     scene: SceneConfig
     frame: number
+    agentStates: Map<string, AgentState>
     // Stored as Anthropic.MessageParam[] at runtime; typed as unknown[] to avoid
     // importing the SDK at the type level in this module.
     history: unknown[]
@@ -25,6 +26,7 @@ export function getOrCreateSession(id: string): Session {
         sessions.set(id, {
             scene: structuredClone(EMPTY_SCENE),
             frame: 0,
+            agentStates: new Map(),
             history: []
         })
     }
@@ -39,6 +41,7 @@ export function resetSession(id: string): void {
     sessions.set(id, {
         scene: structuredClone(EMPTY_SCENE),
         frame: 0,
+        agentStates: new Map(),
         history: []
     })
 }

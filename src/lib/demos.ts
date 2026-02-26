@@ -161,8 +161,65 @@ const ripples: SceneConfig = {
     ]
 }
 
+const BOID_COUNT = 40
+
+const boidColors = ['#4a9eff', '#4affcc', '#ff6ef7', '#f9d060', '#e05838']
+
+const boids: SceneConfig = {
+    background: '#05050f',
+    fps: 60,
+    objects: [
+        // Subtle boundary indicator
+        {
+            id: 'boundary', type: 'rect',
+            x: { formula: 'width / 2' }, y: { formula: 'height / 2' },
+            width: { formula: 'width - 40' }, height: { formula: 'height - 40' },
+            fill: null, stroke: '#ffffff', strokeWidth: 1,
+            opacity: 0.06, layer: 0
+        },
+        // Label
+        {
+            id: 'label', type: 'text',
+            x: { formula: 'width / 2' }, y: { formula: 'height - 20' },
+            text: 'boids — separation · alignment · cohesion',
+            fontSize: 12,
+            fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+            fill: '#4a9eff',
+            opacity: 0.3,
+            layer: 3
+        },
+        // Boids
+        ...Array.from({ length: BOID_COUNT }, (_, i) => ({
+            id: `boid${i}`,
+            type: 'agent' as const,
+            x: 100 + (i % 8) * 80,
+            y: 80 + Math.floor(i / 8) * 80,
+            width: 10,
+            height: 10,
+            fill: boidColors[i % boidColors.length],
+            stroke: null,
+            opacity: 0.85,
+            layer: 2,
+            mass: 1.0,
+            maxSpeed: 3.0,
+            maxForce: 0.15,
+            edges: 'wrap' as const,
+            vx: (Math.cos(i * 0.8) * 2),
+            vy: (Math.sin(i * 0.8) * 2),
+            behaviors: [
+                { type: 'separate' as const, radius: 28, weight: 1.5 },
+                { type: 'align' as const,    radius: 60, weight: 1.0 },
+                { type: 'cohere' as const,   radius: 80, weight: 0.8 },
+                { type: 'wander' as const,   strength: 0.2, speed: 0.4, weight: 0.3 }
+            ],
+            trail: { length: 18, color: boidColors[i % boidColors.length], opacity: 0.25, width: 1.5 }
+        }))
+    ]
+}
+
 export const demos: Demo[] = [
     { id: 'solar-system', label: 'Solar System', scene: solarSystem },
     { id: 'lissajous',    label: 'Lissajous',    scene: lissajous },
-    { id: 'ripples',      label: 'Ripples',       scene: ripples }
+    { id: 'ripples',      label: 'Ripples',       scene: ripples },
+    { id: 'boids',        label: 'Boids',         scene: boids }
 ]
