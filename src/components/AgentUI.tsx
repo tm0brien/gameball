@@ -1,6 +1,7 @@
 'use client'
 
 import type { SceneConfig } from 'engine/types'
+import { demos } from 'lib/demos'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import styled, { keyframes } from 'styled-components'
 
@@ -325,6 +326,126 @@ const SendButton = styled.button<{ $disabled: boolean }>`
     }
 `
 
+// ─── NBA Search styles ────────────────────────────────────────────────────────
+
+const NBASearchWrapper = styled.div`
+    position: relative;
+    display: flex;
+    align-items: center;
+`
+
+const NBAInput = styled.input`
+    width: 148px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid #1e1e2e;
+    background: #0f0f1a;
+    color: #c0c0d8;
+    font-size: 11.5px;
+    font-family: inherit;
+    outline: none;
+    caret-color: #4a9eff;
+    transition: border-color 0.15s, width 0.2s;
+
+    &:focus {
+        border-color: #4a9eff44;
+        width: 180px;
+    }
+
+    &::placeholder {
+        color: #333348;
+    }
+`
+
+const NBADropdown = styled.ul`
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: #111120;
+    border: 1px solid #2a2a40;
+    border-radius: 8px;
+    list-style: none;
+    margin: 0;
+    padding: 4px;
+    z-index: 100;
+    box-shadow: 0 8px 24px #00000066;
+    min-width: 220px;
+`
+
+const NBADropdownItem = styled.li<{ $loading?: boolean }>`
+    padding: 7px 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    color: ${p => p.$loading ? '#444460' : '#b0b0cc'};
+    cursor: ${p => p.$loading ? 'default' : 'pointer'};
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    transition: background 0.1s;
+
+    &:hover {
+        background: ${p => p.$loading ? 'transparent' : '#1e1e30'};
+    }
+
+    span.team {
+        font-size: 10px;
+        color: #444460;
+        font-family: 'JetBrains Mono', monospace;
+    }
+`
+
+const NBALoadingBar = styled.div`
+    height: 2px;
+    background: #4a9eff44;
+    border-radius: 1px;
+    overflow: hidden;
+    margin-top: 2px;
+
+    &::after {
+        content: '';
+        display: block;
+        height: 100%;
+        width: 40%;
+        background: #4a9eff;
+        animation: slide 1s ease-in-out infinite;
+    }
+
+    @keyframes slide {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(350%); }
+    }
+`
+
+const DemoSelect = styled.select`
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid #1e1e2e;
+    background: #0f0f1a;
+    color: #555575;
+    font-size: 11.5px;
+    cursor: pointer;
+    font-family: inherit;
+    outline: none;
+    appearance: none;
+    padding-right: 22px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23555575' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 7px center;
+    transition: border-color 0.15s, color 0.15s;
+
+    &:hover {
+        border-color: #4a9eff33;
+        color: #7788aa;
+    }
+
+    option {
+        background: #0f0f1a;
+        color: #c0c0d8;
+    }
+`
+
 const ErrorBanner = styled.div`
     padding: 8px 16px;
     background: #1a0808;
@@ -342,6 +463,110 @@ const CanvasPanel = styled.div`
     background: #060609;
     min-width: 0;
 `
+
+// ─── NBA Player Search ────────────────────────────────────────────────────────
+
+interface NBAPlayerResult {
+    id: number
+    name: string
+    teamAbbreviation: string
+}
+
+function NBASearch({ onLoad }: { onLoad: (scene: SceneConfig) => void }) {
+    const [query, setQuery] = React.useState('')
+    const [results, setResults] = React.useState<NBAPlayerResult[]>([])
+    const [loadingSearch, setLoadingSearch] = React.useState(false)
+    const [loadingChart, setLoadingChart] = React.useState<number | null>(null)
+    const [open, setOpen] = React.useState(false)
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const wrapperRef = useRef<HTMLDivElement>(null)
+
+    // Close dropdown on outside click
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+                setOpen(false)
+            }
+        }
+        document.addEventListener('mousedown', handler)
+        return () => document.removeEventListener('mousedown', handler)
+    }, [])
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value
+        setQuery(val)
+        setOpen(true)
+        if (debounceRef.current) clearTimeout(debounceRef.current)
+        if (val.length < 2) { setResults([]); return }
+        debounceRef.current = setTimeout(async () => {
+            setLoadingSearch(true)
+            try {
+                const res = await fetch(`/api/nba/players?search=${encodeURIComponent(val)}`)
+                const data = await res.json()
+                setResults(data.players ?? [])
+            } catch { setResults([]) }
+            finally { setLoadingSearch(false) }
+        }, 300)
+    }
+
+    const loadPlayer = async (player: NBAPlayerResult) => {
+        setOpen(false)
+        setQuery(player.name)
+        setLoadingChart(player.id)
+        try {
+            const res = await fetch(`/api/nba?playerId=${player.id}&season=2024-25`)
+            if (!res.ok) {
+                const err = await res.json()
+                alert(`NBA API error: ${err.error ?? res.statusText}`)
+                return
+            }
+            const data = await res.json()
+            // Compile locally: build shot chart scene
+            const shots = data.shots
+            if (!shots?.length) { alert('No shot data found for this player.'); return }
+            // We import compile lazily via fetch to avoid bundling issues
+            const compileRes = await fetch('/api/nba/compile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shots, player: data.player })
+            })
+            if (compileRes.ok) {
+                const { scene } = await compileRes.json()
+                onLoad(scene)
+            }
+        } catch (err) {
+            alert(`Failed to load shots: ${err instanceof Error ? err.message : err}`)
+        } finally {
+            setLoadingChart(null)
+            setQuery('')
+        }
+    }
+
+    return (
+        <NBASearchWrapper ref={wrapperRef}>
+            <NBAInput
+                value={loadingChart ? '  loading…' : query}
+                onChange={handleChange}
+                onFocus={() => query.length >= 2 && setOpen(true)}
+                placeholder="nba player…"
+                disabled={loadingChart !== null}
+                spellCheck={false}
+            />
+            {loadingChart && <NBALoadingBar style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }} />}
+            {open && (results.length > 0 || loadingSearch) && (
+                <NBADropdown>
+                    {loadingSearch && <NBADropdownItem $loading>searching…</NBADropdownItem>}
+                    {results.map(p => (
+                        <NBADropdownItem key={p.id} onClick={() => loadPlayer(p)}>
+                            {p.name}
+                            <span className="team">{p.teamAbbreviation}</span>
+                        </NBADropdownItem>
+                    ))}
+                </NBADropdown>
+            )}
+        </NBASearchWrapper>
+    )
+}
 
 // ─── Tool name labels ──────────────────────────────────────────────────────────
 
@@ -424,6 +649,12 @@ export default function AgentUI() {
         liveToolCallsRef.current = []
         liveTextRef.current = ''
         currentDebugTurnRef.current = null
+    }, [])
+
+    const loadDemo = useCallback((demoId: string) => {
+        const demo = demos.find(d => d.id === demoId)
+        if (!demo) return
+        setScene(demo.scene)
     }, [])
 
     const sendMessage = useCallback(
@@ -602,6 +833,17 @@ export default function AgentUI() {
                     gameball
                 </Logo>
                 <HeaderActions>
+                    <NBASearch onLoad={s => setScene(s)} />
+                    <DemoSelect
+                        defaultValue=""
+                        onChange={e => { if (e.target.value) loadDemo(e.target.value) }}
+                        title="Load a demo scene"
+                    >
+                        <option value="" disabled>demos</option>
+                        {demos.map(d => (
+                            <option key={d.id} value={d.id}>{d.label}</option>
+                        ))}
+                    </DemoSelect>
                     {hasMessages && (
                         <HeaderButton onClick={resetConversation} title="Start a new conversation">
                             New scene

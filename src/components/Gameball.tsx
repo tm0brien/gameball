@@ -2,6 +2,7 @@
 
 import type { AgentState, SceneConfig } from 'engine/types'
 import { FrameLoop } from 'engine/loop'
+import { processEvents, processKeyframes } from 'engine/playback'
 import { resolveScene } from 'engine/scene'
 import type { TrailCommand } from 'renderer/commands'
 import { renderFrame } from 'renderer/canvas'
@@ -60,6 +61,15 @@ export default function Gameball({ scene, width, height, style, className }: Pro
             const w = canvas.width
             const h = canvas.height
             if (w === 0 || h === 0) return
+
+            // Apply event/keyframe overrides before physics
+            const ct = s.courtTransform
+            if (s.events?.length) {
+                processEvents(s.events, frame, agentStatesRef.current, ct, w, h)
+            }
+            if (s.keyframes?.length && ct) {
+                processKeyframes(s.keyframes, frame, agentStatesRef.current, ct, w, h)
+            }
 
             const { commands, objects, agentStates } = resolveScene(s, frame, t, w, h, agentStatesRef.current)
             agentStatesRef.current = agentStates

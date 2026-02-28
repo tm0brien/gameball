@@ -57,6 +57,23 @@ export interface TextCommand {
     layer: number
 }
 
+export interface ArcCommand {
+    type: 'arc'
+    objectId: string
+    x: number
+    y: number
+    radiusX: number
+    radiusY: number
+    startAngle: number
+    endAngle: number
+    counterclockwise: boolean
+    fill: string | null
+    stroke: string | null
+    strokeWidth: number
+    opacity: number
+    layer: number
+}
+
 export interface TrailCommand {
     type: 'trail'
     objectId: string
@@ -67,4 +84,4 @@ export interface TrailCommand {
     layer: number
 }
 
-export type DrawCommand = EllipseCommand | RectCommand | LineCommand | TextCommand | TrailCommand
+export type DrawCommand = EllipseCommand | RectCommand | LineCommand | TextCommand | ArcCommand | TrailCommand

@@ -1,10 +1,11 @@
-import type { DrawCommand, EllipseCommand, LineCommand, RectCommand, TextCommand } from 'renderer/commands'
+import type { ArcCommand, DrawCommand, EllipseCommand, LineCommand, RectCommand, TextCommand } from 'renderer/commands'
 
 import { computeSteering } from './behaviors'
 import { evalBoolean, evalColor, evalNumber, evalString, type EvalScope } from './evaluator'
 import type {
     AgentObject,
     AgentState,
+    ArcObject,
     EllipseObject,
     GroupObject,
     LineObject,
@@ -122,6 +123,27 @@ function resolveGroup(obj: GroupObject, scope: EvalScope): ResolvedObject {
     }
 }
 
+function resolveArc(obj: ArcObject, scope: EvalScope): ArcCommand {
+    const rx = evalNumber(obj.radiusX, 20, scope)
+    const ry = obj.radiusY !== undefined ? evalNumber(obj.radiusY, rx, scope) : rx
+    return {
+        type: 'arc',
+        objectId: obj.id,
+        x: evalNumber(obj.x, 0, scope),
+        y: evalNumber(obj.y, 0, scope),
+        radiusX: rx,
+        radiusY: ry,
+        startAngle: obj.startAngle,
+        endAngle: obj.endAngle,
+        counterclockwise: obj.counterclockwise ?? false,
+        fill: evalColor(obj.fill, null, scope),
+        stroke: evalColor(obj.stroke, '#ffffff', scope),
+        strokeWidth: obj.strokeWidth ?? 1,
+        opacity: evalNumber(obj.opacity, 1, scope),
+        layer: obj.layer ?? 0
+    }
+}
+
 function resolveAgent(obj: AgentObject, state: AgentState): EllipseCommand {
     return {
         type: 'ellipse',
@@ -142,18 +164,24 @@ function resolveAgent(obj: AgentObject, state: AgentState): EllipseCommand {
  * Build the start-of-frame agent snapshot from either existing states (carry-forward)
  * or the object's initial x/y/vx/vy values. Called before the main resolution loop
  * so neighbor-based behaviors (separate, align, cohere) see consistent positions.
+ *
+ * Evaluates formula-based initial positions at frame 0 using the canvas dimensions,
+ * enabling the sports plugin to place players at scale-adaptive positions.
  */
 function buildAgentSnapshots(
     objects: SceneObject[],
-    prevStates: Map<string, AgentState> | undefined
+    prevStates: Map<string, AgentState> | undefined,
+    canvasWidth: number,
+    canvasHeight: number
 ): Map<string, AgentState> {
     const snap = new Map<string, AgentState>()
+    const initScope: EvalScope = { frame: 0, t: 0, width: canvasWidth, height: canvasHeight, objects: {} }
     for (const obj of objects) {
         if (obj.type !== 'agent') continue
         const prev = prevStates?.get(obj.id)
         snap.set(obj.id, prev ?? {
-            x: typeof obj.x === 'number' ? obj.x : 0,
-            y: typeof obj.y === 'number' ? obj.y : 0,
+            x: evalNumber(obj.x, 0, initScope),
+            y: evalNumber(obj.y, 0, initScope),
             vx: obj.vx ?? 0,
             vy: obj.vy ?? 0,
             wanderAngle: Math.random() * Math.PI * 2,
@@ -178,7 +206,7 @@ export function resolveScene(
     const ordered = sortByDependency(config.objects)
 
     // Snapshot of all agents at the start of this frame (read-only for neighbor queries)
-    const agentSnapshots = buildAgentSnapshots(ordered, prevAgentStates)
+    const agentSnapshots = buildAgentSnapshots(ordered, prevAgentStates, width, height)
     // Mutable map that accumulates each agent's post-integration state
     const nextAgentStates = new Map<string, AgentState>()
 
@@ -229,29 +257,45 @@ export function resolveScene(
             // Mutable copy of this agent's state — behaviors may update wanderAngle / pathIndex
             const state: AgentState = { ...agentSnapshots.get(obj.id)! }
 
-            // Compute weighted steering force (may mutate state.wanderAngle / state.pathIndex)
-            const force = computeSteering(obj, obj.id, state, agentSnapshots, resolvedObjects)
+            let nx: number
+            let ny: number
+            let vx = 0
+            let vy = 0
 
-            // Integrate physics
-            const mass = obj.mass ?? 1.0
-            const maxSpeed = obj.maxSpeed ?? 4.0
-            let vx = state.vx + force.x / mass
-            let vy = state.vy + force.y / mass
-            const speed = Math.sqrt(vx * vx + vy * vy)
-            if (speed > maxSpeed) { vx = (vx / speed) * maxSpeed; vy = (vy / speed) * maxSpeed }
+            if (state.keyframePos) {
+                // Fidelity model: keyframe overrides steering — position is exact, velocity zeroed
+                nx = state.keyframePos.x
+                ny = state.keyframePos.y
+            } else {
+                // Normal physics with optional behavior override from events
+                const force = computeSteering(obj, obj.id, state, agentSnapshots, resolvedObjects, state.behaviorOverride)
 
-            let nx = state.x + vx
-            let ny = state.y + vy
+                const mass = obj.mass ?? 1.0
+                const maxSpeed = obj.maxSpeed ?? 4.0
+                const damping = obj.damping ?? 1.0
+                vx = (state.vx + force.x / mass) * damping
+                vy = (state.vy + force.y / mass) * damping
+                const speed = Math.sqrt(vx * vx + vy * vy)
+                if (speed > maxSpeed) { vx = (vx / speed) * maxSpeed; vy = (vy / speed) * maxSpeed }
 
-            // Edge wrapping
-            if (obj.edges === 'wrap') {
-                if (nx < 0) nx += width
-                if (nx > width) nx -= width
-                if (ny < 0) ny += height
-                if (ny > height) ny -= height
+                nx = state.x + vx
+                ny = state.y + vy
+
+                if (obj.edges === 'wrap') {
+                    if (nx < 0) nx += width
+                    if (nx > width) nx -= width
+                    if (ny < 0) ny += height
+                    if (ny > height) ny -= height
+                }
             }
 
-            const nextState: AgentState = { x: nx, y: ny, vx, vy, wanderAngle: state.wanderAngle, pathIndex: state.pathIndex }
+            // Carry forward event-driven overrides (they persist until a new event changes them)
+            const nextState: AgentState = {
+                x: nx, y: ny, vx, vy,
+                wanderAngle: state.wanderAngle, pathIndex: state.pathIndex,
+                behaviorOverride: state.behaviorOverride,
+                keyframePos: null  // consumed — processKeyframes re-injects next frame if needed
+            }
             nextAgentStates.set(obj.id, nextState)
 
             const cmd = resolveAgent(obj, nextState)
@@ -259,8 +303,13 @@ export function resolveScene(
             const resolved: ResolvedObject = { id: obj.id, type: 'agent', x: nx, y: ny, opacity: cmd.opacity, visible: true, layer: cmd.layer }
             resolvedObjects[obj.id] = resolved
             scope.objects[obj.id] = { x: nx, y: ny, vx, vy, width: obj.width ?? 16, height: obj.height ?? 16 }
+        } else if (obj.type === 'arc') {
+            const cmd = resolveArc(obj, objectScope)
+            commands.push(cmd)
+            const resolved: ResolvedObject = { id: obj.id, type: obj.type, x: cmd.x, y: cmd.y, opacity: cmd.opacity, visible: true, layer: cmd.layer }
+            resolvedObjects[obj.id] = resolved
+            scope.objects[obj.id] = { x: cmd.x, y: cmd.y }
         }
-        // arc: not yet implemented, skip silently
     }
 
     // Sort by layer

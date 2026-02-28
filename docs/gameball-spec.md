@@ -860,29 +860,52 @@ Goal: a flock of agents steering around each other.
 
 ---
 
-### M4 — Sports Plugin (Basketball) 🔲 Not started
+### M4 — Sports Plugin (Basketball) ✅ Complete
 
 Goal: a recognizable basketball half-court simulation, authored conversationally.
 
-- 🔲 Basketball court renderer (full + half variants)
-- 🔲 Team / player / ball compilation from plugin config → core scene
-- 🔲 Sports behavior primitives: `guard`, `defend_zone`, `fast_break`, `set_screen`
-- 🔲 Real-world coordinate transform (feet → canvas pixels)
-- 🔲 Plugin tools: `setPlay`, `setFormation`, `setPossession`
-- 🔲 Basic demo: conversational 5v5 half-court play creation
+- ✅ Basketball court renderer (full + half variants) — paint, FT circle, three-point arc, restricted area, backboard, rim
+- ✅ Team / player / ball compilation from plugin config → core scene
+- ✅ Sports behavior primitives: `guard`, `defend_zone`, `fast_break`, `set_screen`
+- ✅ Real-world coordinate transform (feet → canvas pixels) — formula-based, adapts to canvas size
+- ✅ Plugin tools: `compileSport`, `setPlay` (fast_break, pick_and_roll, iso), `setFormation`, `setPossession`
+- ✅ Basic demo: 5v5 half-court (home in 5-out, away in zone-2-3)
+- ✅ `arc` object type implemented (required for court geometry; previously stubbed)
+
+**Implementation notes:**
+- `src/lib/sports-plugin/` — `types.ts`, `basketball.ts`, `index.ts`
+- Court objects use formula-based positions that scale to any canvas size
+- Named formations: `5-out`, `4-1` (offense); `man-to-man`, `zone-2-3`, `zone-3-2` (defense)
+- `setFormation` teleports players by directly writing to `session.agentStates`
+- `buildAgentSnapshots` in `scene.ts` now evaluates formula-based initial agent positions (needed for formula-positioned agents to initialize correctly on any canvas size)
+- `compileSport` replaces the full session scene and resets agent states
 
 ---
 
-### M4.5 — Data-Driven Playback 🔲 Not started
+### M4.5 — Data-Driven Playback ✅ Complete
 
 Goal: feed a shot chart or play-by-play and watch it play out.
 
-- 🔲 `events` array support — behavior switching triggered at specific frames
-- 🔲 `keyframes` array support — exact positional replay from tracking data
-- 🔲 Fidelity model: keyframes override behaviors; behaviors fill gaps
-- 🔲 Shot chart visualization (static + animated)
-- 🔲 Basketball play-by-play demo
-- 🔲 NBA Stats API coordinate transform (`LOC_X`/`LOC_Y` → Gameball feet)
+- ✅ `events` array support — behavior switching triggered at specific frames
+- ✅ `keyframes` array support — exact positional replay from tracking data
+- ✅ Fidelity model: keyframes override behaviors; behaviors fill gaps
+- ✅ Shot chart visualization (static + animated)
+- ✅ Basketball play-by-play demo (shot chart with 20 game-timed shots in demos)
+- ✅ NBA Stats API coordinate transform (`LOC_X`/`LOC_Y` → Gameball feet)
+
+**Implementation notes:**
+
+- `SceneConfig` extended with `events?: GameEvent[]`, `keyframes?: Keyframe[]`, `courtTransform?: CourtTransform`
+- `AgentState` extended with `behaviorOverride?: BehaviorConfig[] | null` and `keyframePos?: {x,y} | null`
+- New file `src/engine/playback.ts`: `processEvents`, `processKeyframes`, `worldToCanvas`, `transformNBAStatsShot`
+- `computeSteering` in `behaviors.ts` accepts optional `behaviorsOverride` parameter; `scene.ts` passes `state.behaviorOverride` for event-driven behavior injection and skips physics when `state.keyframePos` is set
+- `src/lib/sports-plugin/shot-chart.ts`: compiles `ShotChartConfig` into animated ellipse objects with `visible` formulas; flash ring effect on appearance; timing from `quarter`+`gameClock` or evenly spaced fallback
+- `compileShotChart` tool in `agent-tools.ts`; `setEvents` and `setKeyframes` tools added
+- `runFrames` calls `processEvents`/`processKeyframes` before each frame
+- `Gameball.tsx` client frame loop also calls `processEvents`/`processKeyframes` using `scene.courtTransform`
+- `BasketballConfig.teams` made optional so shot-chart-only scenes don't require teams
+- `courtTransform` embedded in compiled `SceneConfig` so the client can convert world coords to canvas pixels
+- Shot chart demo added to `demos.ts` (20 shots with real quarter/gameClock timing, animated playback at 8× speed)
 
 ---
 

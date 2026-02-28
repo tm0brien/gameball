@@ -63,9 +63,16 @@ export interface TextObject extends BaseObject {
     align?: 'left' | 'center' | 'right'
 }
 
-// arc and group are future types — parsed but not rendered in M1
 export interface ArcObject extends BaseObject {
     type: 'arc'
+    radiusX: AnimatableNumber
+    radiusY?: AnimatableNumber    // defaults to radiusX if omitted
+    startAngle: number            // radians
+    endAngle: number              // radians
+    counterclockwise?: boolean
+    fill?: AnimatableColor
+    stroke?: AnimatableColor
+    strokeWidth?: number
 }
 
 export interface GroupObject extends BaseObject {
@@ -92,6 +99,11 @@ export type BehaviorConfig =
     | { type: 'cohere'; radius?: number; weight?: number }
     | { type: 'follow_path'; path: Array<{ x: number; y: number }>; loop?: boolean; weight?: number }
     | { type: 'maintain_zone'; zone: ZoneConfig; weight?: number }
+    // Sports-specific behaviors
+    | { type: 'guard'; target: string; weight?: number }
+    | { type: 'defend_zone'; zone: ZoneConfig; weight?: number }
+    | { type: 'fast_break'; target: BehaviorTarget; weight?: number }
+    | { type: 'set_screen'; ballHandler: string; offset?: { x: number; y: number }; weight?: number }
 
 export interface AgentObject extends BaseObject {
     type: 'agent'
@@ -109,6 +121,9 @@ export interface AgentObject extends BaseObject {
     vy?: number
     // Edge handling: 'wrap' teleports agents across edges, 'none' lets them drift
     edges?: 'wrap' | 'none'
+    // Velocity damping per frame (0–1). 1.0 = no damping (default). 0.85 = smooth deceleration.
+    // With damping < 1, agents slow to a stop when no behaviors are pushing them.
+    damping?: number
 }
 
 // Runtime state for physics agents — persists between frames
@@ -119,6 +134,33 @@ export interface AgentState {
     vy: number
     wanderAngle: number
     pathIndex: number
+    // Injected by event processing before each frame. undefined = not set (use object's behaviors).
+    // null or [] = explicitly no behaviors (agent holds position via damping).
+    behaviorOverride?: BehaviorConfig[] | null
+    // Injected by keyframe processing. When present, skips steering physics entirely.
+    keyframePos?: { x: number; y: number } | null
+}
+
+// ─── Data-driven playback types ───────────────────────────────────────────────
+
+export interface GameEvent {
+    frame: number
+    type: string
+    [key: string]: unknown
+}
+
+export interface Keyframe {
+    frame: number
+    agent: string
+    x: number  // real-world coordinates (feet for basketball, etc.)
+    y: number
+}
+
+// Court coordinate transform — embedded in SceneConfig by the sports plugin compiler
+// so the client frame loop can convert world coords (keyframes, events) to canvas pixels.
+export interface CourtTransform {
+    sport: 'basketball'
+    variant: 'full' | 'half'
 }
 
 export type SceneObject =
@@ -136,6 +178,9 @@ export interface SceneConfig {
     height?: number
     fps?: number
     objects: SceneObject[]
+    events?: GameEvent[]
+    keyframes?: Keyframe[]
+    courtTransform?: CourtTransform
 }
 
 // Resolved object — all formulas evaluated to concrete values

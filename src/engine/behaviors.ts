@@ -183,21 +183,29 @@ function maintainZone(state: AgentState, zone: ZoneConfig, maxSpeed: number): Ve
  *
  * `agentSnapshots` is the read-only start-of-frame snapshot used for
  * neighbor-based behaviors (separate, align, cohere, pursue, evade).
+ *
+ * `behaviorsOverride` when provided replaces the agent's own behaviors array.
+ * Pass `[]` to freeze the agent in place (damping brings it to rest).
  */
 export function computeSteering(
     agent: AgentObject,
     agentId: string,
     state: AgentState,
     agentSnapshots: ReadonlyMap<string, AgentState>,
-    resolvedObjects: Record<string, { x: number; y: number }>
+    resolvedObjects: Record<string, { x: number; y: number }>,
+    behaviorsOverride?: BehaviorConfig[] | null
 ): Vec2 {
-    if (!agent.behaviors || agent.behaviors.length === 0) return zero()
+    const behaviors: BehaviorConfig[] = behaviorsOverride !== undefined
+        ? (behaviorsOverride ?? [])
+        : (agent.behaviors ?? [])
+
+    if (behaviors.length === 0) return zero()
 
     const maxSpeed = agent.maxSpeed ?? 4.0
     const maxForce = agent.maxForce ?? 0.3
     let total = zero()
 
-    for (const b of agent.behaviors as BehaviorConfig[]) {
+    for (const b of behaviors) {
         const w = b.weight ?? 1.0
         let f = zero()
 
@@ -245,6 +253,28 @@ export function computeSteering(
             case 'maintain_zone':
                 f = maintainZone(state, b.zone, maxSpeed)
                 break
+            // Sports-specific behaviors
+            case 'guard': {
+                const ts = agentSnapshots.get(b.target)
+                if (ts) f = arrive(state, { x: ts.x, y: ts.y }, maxSpeed, 20)
+                break
+            }
+            case 'defend_zone':
+                f = maintainZone(state, b.zone, maxSpeed)
+                break
+            case 'fast_break': {
+                const t = resolveTarget(b.target, agentSnapshots, resolvedObjects)
+                if (t) f = seek(state, t, maxSpeed)
+                break
+            }
+            case 'set_screen': {
+                const bh = agentSnapshots.get(b.ballHandler)
+                if (bh) {
+                    const screenPos = { x: bh.x + (b.offset?.x ?? 0), y: bh.y + (b.offset?.y ?? 0) }
+                    f = arrive(state, screenPos, maxSpeed, 8)
+                }
+                break
+            }
         }
 
         total = add(total, scale(f, w))

@@ -1,4 +1,4 @@
-import type { DrawCommand, EllipseCommand, LineCommand, RectCommand, TextCommand, TrailCommand } from './commands'
+import type { ArcCommand, DrawCommand, EllipseCommand, LineCommand, RectCommand, TextCommand, TrailCommand } from './commands'
 
 function withOpacity(ctx: CanvasRenderingContext2D, opacity: number, fn: () => void) {
     const prev = ctx.globalAlpha
@@ -70,6 +70,19 @@ function drawText(ctx: CanvasRenderingContext2D, cmd: TextCommand) {
     })
 }
 
+function drawArc(ctx: CanvasRenderingContext2D, cmd: ArcCommand) {
+    withOpacity(ctx, cmd.opacity, () => {
+        ctx.beginPath()
+        if (cmd.radiusX === cmd.radiusY) {
+            ctx.arc(cmd.x, cmd.y, Math.max(0, cmd.radiusX), cmd.startAngle, cmd.endAngle, cmd.counterclockwise)
+        } else {
+            ctx.ellipse(cmd.x, cmd.y, Math.max(0, cmd.radiusX), Math.max(0, cmd.radiusY), 0, cmd.startAngle, cmd.endAngle, cmd.counterclockwise)
+        }
+        if (cmd.fill) { ctx.fillStyle = cmd.fill; ctx.fill() }
+        if (cmd.stroke) { ctx.strokeStyle = cmd.stroke; ctx.lineWidth = cmd.strokeWidth; ctx.stroke() }
+    })
+}
+
 function drawTrail(ctx: CanvasRenderingContext2D, cmd: TrailCommand) {
     if (cmd.points.length < 2) return
     const n = cmd.points.length
@@ -99,6 +112,7 @@ export function renderFrame(ctx: CanvasRenderingContext2D, commands: DrawCommand
             case 'rect':    drawRect(ctx, cmd);    break
             case 'line':    drawLine(ctx, cmd);    break
             case 'text':    drawText(ctx, cmd);    break
+            case 'arc':     drawArc(ctx, cmd);     break
             case 'trail':   drawTrail(ctx, cmd);   break
         }
     }

@@ -1,4 +1,6 @@
 import type { SceneConfig } from 'engine/types'
+import { compile } from './sports-plugin'
+import type { ShotChartConfig } from './sports-plugin'
 
 export interface Demo {
     id: string
@@ -217,9 +219,66 @@ const boids: SceneConfig = {
     ]
 }
 
+const basketball = compile({
+    sport: 'basketball',
+    court: { variant: 'half', color: '#c8a96e', lineColor: '#f0f0e8' },
+    teams: [
+        { id: 'home', color: '#4a9eff', players: 5, formation: '5-out' },
+        { id: 'away', color: '#e07040', players: 5, formation: 'zone-2-3' }
+    ],
+    ball: { color: '#ff8c00', possession: 'home.player1' }
+})
+
+// ─── Shot chart demo ─────────────────────────────────────────────────────────
+// Realistic shot distribution for a guard-type player (20 shots, animated)
+
+const shotChartData: ShotChartConfig = {
+    mode: 'animated',
+    playbackSpeed: 8,
+    fps: 60,
+    madeColor: '#4ade80',
+    missedColor: '#f87171',
+    dotRadius: 5,
+    showFlash: true,
+    shots: [
+        // Q1 — opening burst
+        { x: 40,   y:  1.5, made: true,  shotType: 'layup',         quarter: 1, gameClock: '10:44' },
+        { x: 36,   y:  8,   made: false, shotType: 'mid-range',     quarter: 1, gameClock: '9:51' },
+        { x: 22,   y:  -1,  made: true,  shotType: 'three-pointer', quarter: 1, gameClock: '8:29' },
+        { x: 32,   y: -11,  made: true,  shotType: 'mid-range',     quarter: 1, gameClock: '7:13' },
+        { x: 20,   y:  12,  made: false, shotType: 'three-pointer', quarter: 1, gameClock: '6:02' },
+        // Q2
+        { x: 39,   y:  3,   made: true,  shotType: 'layup',         quarter: 2, gameClock: '11:14' },
+        { x: 26,   y: -14,  made: true,  shotType: 'three-pointer', quarter: 2, gameClock: '9:43' },
+        { x: 34,   y:  9,   made: false, shotType: 'mid-range',     quarter: 2, gameClock: '8:07' },
+        { x: 21,   y:  0,   made: true,  shotType: 'three-pointer', quarter: 2, gameClock: '6:38' },
+        { x: 38,   y: -4,   made: false, shotType: 'floater',       quarter: 2, gameClock: '5:21' },
+        { x: 28,   y:  11,  made: true,  shotType: 'mid-range',     quarter: 2, gameClock: '3:55' },
+        { x: 24,   y: -8,   made: false, shotType: 'three-pointer', quarter: 2, gameClock: '2:14' },
+        // Q3 — hot stretch
+        { x: 22,   y:  14,  made: true,  shotType: 'three-pointer', quarter: 3, gameClock: '10:30' },
+        { x: 22,   y: -14,  made: true,  shotType: 'three-pointer', quarter: 3, gameClock: '9:02' },
+        { x: 37,   y:  6,   made: true,  shotType: 'mid-range',     quarter: 3, gameClock: '7:48' },
+        { x: 41,   y: -2,   made: false, shotType: 'layup',         quarter: 3, gameClock: '6:17' },
+        { x: 29,   y:  0,   made: true,  shotType: 'mid-range',     quarter: 3, gameClock: '4:44' },
+        // Q4 — late game
+        { x: 22,   y:  4,   made: false, shotType: 'three-pointer', quarter: 4, gameClock: '8:11' },
+        { x: 35,   y: -9,   made: true,  shotType: 'mid-range',     quarter: 4, gameClock: '5:33' },
+        { x: 22,   y: -12,  made: true,  shotType: 'three-pointer', quarter: 4, gameClock: '2:05' },
+    ]
+}
+
+const shotChart = compile({
+    sport: 'basketball',
+    court: { variant: 'half', color: '#c8a96e', lineColor: '#f0f0e8' },
+    shotChart: shotChartData
+})
+
 export const demos: Demo[] = [
     { id: 'solar-system', label: 'Solar System', scene: solarSystem },
     { id: 'lissajous',    label: 'Lissajous',    scene: lissajous },
     { id: 'ripples',      label: 'Ripples',       scene: ripples },
-    { id: 'boids',        label: 'Boids',         scene: boids }
+    { id: 'boids',        label: 'Boids',         scene: boids },
+    { id: 'basketball',   label: 'Basketball',    scene: basketball },
+    { id: 'shot-chart',   label: 'Shot Chart',    scene: shotChart }
 ]

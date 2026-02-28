@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
                         write({ type: 'tool_start', id: block.id, name: block.name, input })
 
                         const t0 = Date.now()
-                        const result = executeTool(block.name as ToolName, input, session)
+                        const result = await executeTool(block.name as ToolName, input, session)
                         const durationMs = Date.now() - t0
 
                         write({
